@@ -1,0 +1,54 @@
+# ── 依赖与构建产物 ────────────────────────────────────────────
+node_modules/
+*.tgz
+dist/
+
+# ── 真实使用数据（红线：任何人的 ActivityWatch 记录都不进仓库）──
+aw-data/
+data/
+exports/
+reports/
+*.db
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+*.jsonl
+
+# 本机导出的预览快照（tools/export-sample.mjs --out 用）
+lib/sample-summary.local.js
+
+# ── 凭据类（一律不进仓库）─────────────────────────────────────
+.env
+.env.*
+.credentials*
+*.credentials*
+*credentials*.yaml
+*.pem
+*.key
+*.p12
+*.pfx
+cookies*
+cookie*
+*session*
+*token*
+*secret*
+
+# ── 日志与备份 ────────────────────────────────────────────────
+*load-logs*
+*.log
+*.bak
+*.bak-*
+*.tmp
+
+# ── 本机专用脚本（与私有数据源绑定，不公开）──────────────────
+# 某些本地分析脚本读的是个人数据目录，不属于公开能力；
+# 文件保留在磁盘上，只是不进仓库。
+tools/study-correlation.mjs
+
+# ── 编辑器 / 系统杂物 ─────────────────────────────────────────
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+desktop.ini

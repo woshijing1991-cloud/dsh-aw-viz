@@ -1,0 +1,401 @@
+/* page.css —— 「使用习惯」看板样式表（Magpie / WinUI 3 风格）
+ *
+ * 【设计参考】GitHub: Blinue/Magpie（A general-purpose window upscaler for
+ * Windows 10/11）。README 明确写 "WinUI-based user interface with support for
+ * light and dark themes"；官方截图 img/main-window.png 里可直接量到的做法：
+ *   1. 设置页范式：页面标题(~28px 半粗) → 区块小标题 + 一行 muted 描述 → 单列卡片流
+ *   2. SettingsCard：白底、8px 圆角、1px 浅描边、约 20px 内边距
+ *   3. 单一强调色（蓝）+ 其余全中性灰，界面里几乎没有第三种颜色
+ *   4. 无阴影：深度只靠 1px 描边与背景明度差
+ *   5. 圆角两档：卡片 8px / 控件 4px
+ *   6. 字体 Segoe UI Variable，标题/正文/说明三档
+ *
+ * 本次只替换视觉：HTML 结构与全部功能（区间切换、用途分类、微信拆解、死区、
+ * 时间轴、趋势、周环比）一行未改。
+ */
+
+.aw-page {
+  /* 明暗两套，数值对齐 WinUI 3 的 Light / Dark 资源 */
+  --aw-fg: light-dark(#1a1a1a, #ffffff);
+  --aw-fg-2: light-dark(#3d3d3d, #d6d6d6);
+  --aw-fg-3: light-dark(#5d5d5d, #c5c5c5);    /* TextFillColorSecondary */
+  --aw-fg-4: light-dark(#8a8a8a, #9a9a9a);    /* TextFillColorTertiary */
+  --aw-line: light-dark(#e5e5e5, #3d3d3d);    /* ControlStrokeColorDefault */
+  --aw-card: light-dark(#ffffff, #2c2c2c);    /* CardBackgroundDefault */
+  --aw-page-bg: light-dark(#f3f3f3, #202020);
+  --aw-track: light-dark(#e6e6e6, #3a3a3a);
+  --aw-hover: light-dark(#f5f5f5, #333333);
+  --aw-accent: light-dark(#0067c0, #60cdff);  /* AccentFillColorDefault */
+
+  /* Fluent 语义色：Magpie 界面本身只有单一强调色，这里保留多色仅为数据可读，
+     但全部压到 WinUI SystemFill 的低饱和档 */
+  --aw-s1: light-dark(#0067c0, #60cdff);
+  --aw-s2: light-dark(#0f7b6c, #4cc2b4);
+  --aw-s3: light-dark(#9d5d00, #f0b060);
+  --aw-s4: light-dark(#6b4fbb, #a695e8);
+  --aw-s5: light-dark(#c42b1c, #ff9a8f);
+  --aw-s6: light-dark(#0e7a0d, #6ccb6a);
+
+  flex: 1 1 auto;
+  min-height: 0;
+  height: 100%;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-gutter: stable;
+  background: var(--aw-page-bg);
+  color: var(--aw-fg);
+  /* 关键：必须 inherit，不能写 `light dark`。
+     写 `light dark` 会把祖先（宿主按主题强制）的 color-scheme 覆盖掉，
+     结果 light-dark() 退回按系统偏好解析，深色主题下整页仍是浅色。 */
+  color-scheme: inherit;
+  font-family: "Segoe UI Variable Text", "Segoe UI Variable", "Segoe UI",
+    "Microsoft YaHei UI", system-ui, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+/* 深色：不依赖 color-scheme/light-dark 的可用性，显式覆盖全部变量。
+   宿主（dsh-client-ui-theme）只用 prefers-color-scheme 做探测，并未在根节点声明
+   color-scheme，因此 light-dark() 拿不到主题；client.js 探测后加 .aw-dark 类兜底。 */
+.aw-page.aw-dark {
+  --aw-fg: #ffffff;
+  --aw-fg-2: #d6d6d6;
+  --aw-fg-3: #c5c5c5;
+  --aw-fg-4: #9a9a9a;
+  --aw-line: #3d3d3d;
+  --aw-card: #2c2c2c;
+  --aw-page-bg: #202020;
+  --aw-track: #3a3a3a;
+  --aw-hover: #333333;
+  --aw-accent: #60cdff;
+  --aw-s1: #60cdff;
+  --aw-s2: #4cc2b4;
+  --aw-s3: #f0b060;
+  --aw-s4: #a695e8;
+  --aw-s5: #ff9a8f;
+  --aw-s6: #6ccb6a;
+  color-scheme: dark;
+}
+.aw-page.aw-dark .aw-seg { background: #2c2c2c; }
+.aw-page.aw-dark .aw-seg button[aria-pressed="true"] { color: #000000; }
+.aw-page.aw-dark .aw-btn:active { background: #2a2a2a; }
+.aw-page.aw-dark .aw-state code { background: #333333; }
+.aw-page.aw-dark .aw-warn { border-left-color: #ff9a8f; }
+.aw-page.aw-dark .aw-up { color: #ff9a8f; }
+.aw-page.aw-dark .aw-down { color: #6ccb6a; }
+
+/* 样式生效探针（client.js 用），必须保留 */
+.aw-probe { display: none; }
+
+.aw-inner { max-width: 1000px; margin: 0 auto; padding: 30px 36px 60px; }
+.aw-page *, .aw-page *::before, .aw-page *::after { box-sizing: border-box; }
+.aw-num { font-variant-numeric: tabular-nums; font-feature-settings: "tnum" 1; }
+
+/* ── 页头：WinUI 页面标题范式（大标题 + 下方 muted 说明）── */
+.aw-top { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 24px; }
+.aw-top h1 {
+  margin: 0;
+  font-family: "Segoe UI Variable Display", "Segoe UI Variable", "Segoe UI", sans-serif;
+  font-size: 28px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+}
+.aw-lede { margin: 6px 0 0; color: var(--aw-fg-3); font-size: 13px; }
+.aw-tools { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+
+/* 分段控件：Magpie 截图里 keycap 的「实心强调色」做法 */
+.aw-seg {
+  display: inline-flex;
+  padding: 2px;
+  gap: 2px;
+  background: light-dark(#ededed, #2c2c2c);
+  border: 1px solid var(--aw-line);
+  border-radius: 8px;
+}
+.aw-seg button {
+  font: inherit;
+  font-size: 13px;
+  padding: 5px 14px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--aw-fg-2);
+  cursor: pointer;
+  transition: background 90ms linear;
+}
+.aw-seg button:hover { background: var(--aw-hover); }
+.aw-seg button[aria-pressed="true"] {
+  background: var(--aw-accent);
+  color: light-dark(#ffffff, #000000);
+  font-weight: 600;
+}
+
+/* WinUI 标准按钮：白底 + 1px 描边 + 4px 圆角（对应截图里的 "Change"） */
+.aw-btn {
+  font: inherit;
+  font-size: 13px;
+  height: 32px;
+  padding: 0 14px;
+  border-radius: 4px;
+  border: 1px solid var(--aw-line);
+  background: var(--aw-card);
+  color: var(--aw-fg-2);
+  cursor: pointer;
+  transition: background 90ms linear;
+}
+.aw-btn:hover { background: var(--aw-hover); }
+.aw-btn:active { background: light-dark(#f0f0f0, #2a2a2a); }
+.aw-btn[disabled] { opacity: 0.45; cursor: default; }
+
+/* ── 主视觉：总量 + 一周形状，整块是一张 SettingsCard ── */
+.aw-hero {
+  display: grid;
+  grid-template-columns: 220px minmax(0, 1fr);
+  gap: 32px;
+  align-items: start;
+  padding: 20px 22px;
+  margin-bottom: 12px;
+  background: var(--aw-card);
+  border: 1px solid var(--aw-line);
+  border-radius: 8px;
+}
+@media (max-width: 860px) { .aw-hero { grid-template-columns: 1fr; gap: 18px; } }
+
+.aw-kicker { display: block; font-size: 12px; color: var(--aw-fg-3); margin-bottom: 4px; }
+.aw-total {
+  font-family: "Segoe UI Variable Display", "Segoe UI Variable", "Segoe UI", sans-serif;
+  font-size: 44px;
+  font-weight: 600;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+.aw-total-unit { font-size: 13px; font-weight: 500; color: var(--aw-fg-3); margin-left: 6px; }
+.aw-total-note { margin: 12px 0 0; font-size: 12.5px; color: var(--aw-fg-3); line-height: 1.75; }
+.aw-total-note b { color: var(--aw-fg); font-weight: 600; }
+
+.aw-heat { margin: 0; max-width: 620px; }
+.aw-heat figcaption { font-size: 12px; color: var(--aw-fg-3); margin-bottom: 8px; }
+.aw-heat-grid {
+  display: grid;
+  grid-template-columns: 20px repeat(24, minmax(0, 1fr));
+  gap: 3px;
+  align-items: center;
+}
+.aw-heat-grid .wd { font-size: 10px; color: var(--aw-fg-4); text-align: center; }
+.aw-heat-grid .c { height: 14px; border-radius: 2px; background: var(--aw-track); }
+.aw-heat-grid .c.on { background: var(--aw-accent); }
+.aw-heat-axis {
+  display: grid;
+  grid-template-columns: 20px repeat(24, minmax(0, 1fr));
+  gap: 3px;
+  margin-top: 5px;
+}
+.aw-heat-axis span { font-size: 9.5px; color: var(--aw-fg-4); font-variant-numeric: tabular-nums; }
+
+/* ── KPI：四张独立卡片（不再用 1px 缝隙假装分隔线）── */
+.aw-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.aw-kpi {
+  background: var(--aw-card);
+  border: 1px solid var(--aw-line);
+  border-radius: 8px;
+  padding: 14px 16px;
+}
+.aw-kpi-k { font-size: 12px; color: var(--aw-fg-3); margin-bottom: 6px; }
+.aw-kpi-v {
+  font-family: "Segoe UI Variable Display", "Segoe UI Variable", "Segoe UI", sans-serif;
+  font-size: 22px;
+  font-weight: 600;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+}
+.aw-kpi-v small { font-size: 12px; font-weight: 500; color: var(--aw-fg-3); margin-left: 3px; }
+.aw-kpi-s { margin-top: 5px; font-size: 11.5px; color: var(--aw-fg-4); }
+
+/* ── 两列区块：每列一张卡 ──────────────────────────── */
+.aw-cols { display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 12px; margin-bottom: 12px; }
+@media (max-width: 860px) { .aw-cols { grid-template-columns: 1fr; } }
+.aw-cols > section {
+  background: var(--aw-card);
+  border: 1px solid var(--aw-line);
+  border-radius: 8px;
+  padding: 18px 20px 20px;
+  min-width: 0;
+}
+
+/* 区块标题：小标题 + 一行 muted 描述，无分割线（Magpie 的 Activation / Toolbar 就是这形态） */
+.aw-h { display: flex; align-items: baseline; gap: 10px; margin-bottom: 14px; }
+.aw-h h2 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: -0.005em; }
+.aw-h span { font-size: 12px; color: var(--aw-fg-3); }
+
+/* ── 分类条：贴近 WinUI ProgressBar 的细条 ─────────── */
+.aw-cat { padding: 5px 0; }
+.aw-cat-head { display: flex; justify-content: space-between; gap: 12px; font-size: 13px; margin-bottom: 6px; }
+.aw-cat-name { color: var(--aw-fg-2); }
+.aw-cat-val { color: var(--aw-fg-3); font-variant-numeric: tabular-nums; font-size: 12px; }
+.aw-cat-track { height: 6px; border-radius: 3px; background: var(--aw-track); overflow: hidden; }
+.aw-cat-fill { height: 100%; border-radius: 3px; }
+
+/* ── Top 应用：行式，去掉虚线分隔，靠行距 ──────────── */
+.aw-app {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) 66px;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 0;
+}
+.aw-app-i { font-size: 12px; color: var(--aw-fg-4); font-variant-numeric: tabular-nums; }
+.aw-app-n { display: flex; align-items: center; gap: 7px; min-width: 0; }
+.aw-app-n b {
+  font-weight: 400;
+  font-size: 13.5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.aw-tag {
+  flex: none;
+  font-size: 10.5px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  border: 1px solid var(--aw-line);
+  color: var(--aw-fg-3);
+}
+.aw-app-t { height: 5px; border-radius: 3px; background: var(--aw-track); overflow: hidden; margin-top: 5px; }
+.aw-app-f { height: 100%; background: var(--aw-accent); border-radius: 3px; }
+.aw-app-v { text-align: right; font-size: 12.5px; color: var(--aw-fg-3); font-variant-numeric: tabular-nums; }
+.aw-app-wrap { min-width: 0; }
+
+/* ── 一天的用途时间轴 ──────────────────────────────── */
+.aw-tl {
+  display: grid;
+  grid-template-columns: repeat(24, minmax(0, 1fr));
+  gap: 3px;
+  height: 140px;
+  align-items: end;
+  margin-top: 6px;
+}
+.aw-tl .col { display: flex; flex-direction: column-reverse; height: 100%; gap: 1px; }
+.aw-tl .seg { border-radius: 2px; }
+.aw-tl-axis {
+  display: grid;
+  grid-template-columns: repeat(24, minmax(0, 1fr));
+  gap: 3px;
+  margin-top: 6px;
+  font-size: 9.5px;
+  color: var(--aw-fg-4);
+  font-variant-numeric: tabular-nums;
+}
+.aw-tl-legend { display: flex; flex-wrap: wrap; gap: 16px; margin-top: 10px; font-size: 12px; color: var(--aw-fg-3); }
+.aw-tl-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.aw-tl-legend i { display: inline-block; width: 9px; height: 9px; border-radius: 2px; }
+
+/* ── 用途行：名称 + 细条 + 数值 + 周环比 ───────────── */
+.aw-dp {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr) 128px;
+  align-items: center;
+  gap: 12px;
+  padding: 7px 0;
+  font-size: 13px;
+}
+.aw-dp .n { color: var(--aw-fg-2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.aw-dp .t { height: 6px; border-radius: 3px; background: var(--aw-track); overflow: hidden; }
+/* 必须 display:block —— 它是 span，行内元素吃不到 height:100%，背景会整条消失 */
+.aw-dp .f { display: block; height: 100%; border-radius: 3px; }
+.aw-dp .v { text-align: right; color: var(--aw-fg-3); font-variant-numeric: tabular-nums; font-size: 12px; }
+.aw-delta { font-variant-numeric: tabular-nums; margin-left: 6px; }
+.aw-up { color: light-dark(#c42b1c, #ff9a8f); }
+.aw-down { color: light-dark(#0e7a0d, #6ccb6a); }
+.aw-flat { color: var(--aw-fg-4); }
+
+/* ── 趋势图 ────────────────────────────────────────── */
+.aw-trend {
+  background: var(--aw-card);
+  border: 1px solid var(--aw-line);
+  border-radius: 8px;
+  padding: 18px 20px 16px;
+  margin-bottom: 12px;
+}
+.aw-chart { width: 100%; height: 150px; display: block; overflow: visible; }
+.aw-chart .grid { stroke: var(--aw-line); stroke-width: 1; }
+.aw-chart .area { fill: color-mix(in srgb, var(--aw-accent) 18%, transparent); }
+.aw-chart .line {
+  fill: none;
+  stroke: var(--aw-accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.aw-chart .dot { fill: var(--aw-accent); }
+.aw-chart .grid-label { fill: var(--aw-fg-4); font-size: 10px; font-variant-numeric: tabular-nums; }
+.aw-axis-x { display: flex; justify-content: space-between; font-size: 11px; color: var(--aw-fg-4); margin-top: 6px; }
+
+/* ── 页脚 ──────────────────────────────────────────── */
+.aw-foot {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px 30px;
+  align-items: center;
+  font-size: 12px;
+  color: var(--aw-fg-3);
+  padding: 2px 2px 0;
+}
+.aw-split { display: inline-flex; align-items: center; gap: 10px; }
+.aw-split-bar {
+  display: inline-flex;
+  height: 6px;
+  width: 130px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: var(--aw-track);
+}
+.aw-split-bar i { display: block; height: 100%; }
+.aw-split-bar .pc { background: var(--aw-accent); }
+.aw-split-bar .ph { background: var(--aw-accent); opacity: 0.35; }
+.aw-legend { display: inline-flex; gap: 14px; }
+.aw-legend span { display: inline-flex; align-items: center; gap: 6px; }
+.aw-legend em { width: 9px; height: 9px; border-radius: 2px; background: var(--aw-accent); display: inline-block; }
+.aw-legend em.ph { opacity: 0.35; }
+
+.aw-note { margin: 14px 0 0; font-size: 11.5px; line-height: 1.7; color: var(--aw-fg-4); }
+
+/* ── 状态与兜底 ────────────────────────────────────── */
+.aw-state { padding: 36px 0; max-width: 560px; font-size: 13px; line-height: 1.9; color: var(--aw-fg-2); }
+.aw-state code {
+  font: inherit;
+  font-size: 12.5px;
+  padding: 1px 6px;
+  border-radius: 4px;
+  background: light-dark(#ededed, #333333);
+}
+.aw-warn {
+  margin: 14px 0 0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  border: 1px solid var(--aw-line);
+  border-left: 3px solid light-dark(#c42b1c, #ff9a8f);
+  font-size: 12.5px;
+  color: var(--aw-fg-2);
+  background: var(--aw-card);
+}
+.aw-skel { display: grid; gap: 10px; padding: 30px 0; }
+.aw-skel i {
+  display: block;
+  height: 12px;
+  border-radius: 4px;
+  background: var(--aw-track);
+  animation: aw-pulse 1.4s ease-in-out infinite;
+}
+.aw-skel i:nth-child(1) { width: 40%; }
+.aw-skel i:nth-child(2) { width: 72%; }
+.aw-skel i:nth-child(3) { width: 55%; }
+@keyframes aw-pulse { 0%, 100% { opacity: 0.5; } 50% { opacity: 1; } }
+.aw-empty { color: var(--aw-fg-4); font-size: 13px; padding: 8px 0; }
+.aw-sp { flex: 1; }

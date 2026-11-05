@@ -1,0 +1,4 @@
+# Keep LF in the repository regardless of the OS git checkout
+* text=auto eol=lf
+
+*.png binary

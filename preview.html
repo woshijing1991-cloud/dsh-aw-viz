@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<title>查看 · 使用习惯看板（本地预览）</title>
+<!--
+  本地预览页：只为看清渲染效果，不是插件产物。
+  默认读 lib/sample-summary.js 里的虚构演示数据（file:// 下不能跨源 fetch）；
+  想看真实数据就加 ?live=1 并给出 ?base=<你的 DSH 地址>，或从 http 同源打开。
+  样式直接引用插件即将服务的 /dsh-aw-viz/page.css。
+  宿主主题令牌在这里用一份等价副本模拟，保证明暗都能看。
+-->
+<link rel="stylesheet" href="lib/page.css">
+<script src="lib/sample-summary.js"></script>
+<style>
+  :root {
+    color-scheme: light dark;
+    --dsw-font-family: "Microsoft YaHei UI", "Segoe UI", system-ui, sans-serif;
+    --dsw-alias-label-primary: light-dark(#1b1d21, #e9eaec);
+    --dsw-alias-label-secondary: light-dark(#3d4148, #c3c6cc);
+    --dsw-alias-label-tertiary: light-dark(#6b7078, #9aa0a8);
+    --dsw-alias-label-quaternary: light-dark(#8d939c, #7b828b);
+    --dsw-alias-label-primary-foreground: #fff;
+    --dsw-alias-border-l2: light-dark(#e2e4e8, #34383f);
+    --dsw-alias-bg-base: light-dark(#ffffff, #1a1c1f);
+    --dsw-alias-bg-layer-1: light-dark(#fbfbfc, #202327);
+    --dsw-alias-interactive-bg-hover: light-dark(#eceef2, #2a2e33);
+    --dsw-alias-brand-primary: light-dark(#2f62d8, #7fa6ff);
+  }
+  html, body { margin: 0; height: 100%; background: var(--dsw-alias-bg-base); }
+  /* 复刻宿主 .centerCol 的约束：固定高度 + flex 列 + overflow:hidden。
+     只有面板自己提供滚动，内容才不会被裁掉且能上下滑。 */
+  #root { height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+  .theme-switch { position: fixed; right: 14px; top: 10px; z-index: 9; font: 12px system-ui; }
+</style>
+</head>
+<body>
+<div class="theme-switch">
+  <button onclick="document.documentElement.style.colorScheme = document.documentElement.style.colorScheme === 'dark' ? 'light' : 'dark'">切换明暗</button>
+</div>
+<script>
+  // 支持 ?scheme=dark / ?scheme=light，方便无头截图分别验证两套主题
+  const scheme = new URLSearchParams(location.search).get('scheme')
+  if (scheme === 'dark' || scheme === 'light') document.documentElement.style.colorScheme = scheme
+</script>
+<div id="root"></div>
+<script>
+// 实时数据地址：不再写死端口。同源打开时用 location.origin，
+// 否则用 ?base= 显式指定（例如 http://127.0.0.1:<端口>）；都不给就不拉。
+const QS = new URLSearchParams(location.search)
+const LIVE = QS.get('live') === '1'
+const BASE = QS.get('base') || (location.protocol.startsWith('http') ? location.origin : '')
+const API = BASE ? BASE.replace(/\/+$/, '') + '/dsh-aw-viz/api/summary?days=' + (QS.get('days') || '7') : ''
+
+const SERIES = ['var(--aw-s1)','var(--aw-s2)','var(--aw-s3)','var(--aw-s4)','var(--aw-s5)','var(--aw-s6)']
+
+function fmtDur(m){const v=+m||0;return v>=60?(v/60).toFixed(1)+' 小时':Math.round(v)+' 分钟'}
+function fmtNum(m){const v=+m||0;return v>=600?(v/60).toFixed(1):String(Math.round(v))}
+function unitOf(m){return (+m||0)>=600?'小时':'分钟'}
+
+function heatGrid(heat){
+  const labels=['一','二','三','四','五','六','日']
+  let max=1
+  for(const row of heat) for(const v of row) max=Math.max(max,v)
+  let out=''
+  for(let d=0;d<7;d++){
+    out+=`<div class="wd">${labels[d]}</div>`
+    for(let h=0;h<24;h++){
+      const v=(heat[d]&&heat[d][h])||0
+      const t=v<=0?0:Math.min(1,v/max)
+      out+=`<div class="c${t>0?' on':''}" title="周${labels[d]} ${h}:00 · ${Math.round(v)} 分钟" style="opacity:${t>0?(0.25+t*0.75).toFixed(2):1}"></div>`
+    }
+  }
+  return out
+}
+function heatAxis(){
+  let out='<span></span>'
+  for(let h=0;h<24;h++) out+=`<span>${h%6===0?h:''}</span>`
+  return out
+}
+function hourTimeline(j){
+  const hourly=(j.purpose&&j.purpose.hourly)||[]
+  if(!hourly.length) return ''
+  const S=[['娱乐消遣','var(--aw-s1)'],['学习','var(--aw-s2)'],['办公','var(--aw-s3)']]
+  let max=1
+  const cols=[]
+  for(let h=0;h<24;h++){
+    const r=hourly[h]||{}
+    const ent=r['娱乐消遣']||0, stu=r['学习']||0, wrk=r['办公']||0
+    let all=0; for(const k in r) all+=r[k]||0
+    const other=Math.max(0,all-ent-stu-wrk)
+    max=Math.max(max,ent+stu+wrk+other)
+    cols.push({h,ent,stu,wrk,other})
+  }
+  const bars=cols.map(c=>{
+    const seg=(k,v,color)=> v<=0?'':`<span class="seg" style="height:${(v/max*100).toFixed(1)}%;background:${color}" title="${String(c.h).padStart(2,'0')}:00 ${k} ${Math.round(v)} 分钟"></span>`
+    return `<div class="col" title="${String(c.h).padStart(2,'0')}:00">`
+      + seg('其他',c.other,'var(--aw-track)')
+      + seg('办公',c.wrk,'var(--aw-s3)')
+      + seg('学习',c.stu,'var(--aw-s2)')
+      + seg('娱乐消遣',c.ent,'var(--aw-s1)')
+      + `</div>`
+  }).join('')
+  const axis=Array.from({length:24},(_,h)=>`<span>${h%3===0?h:''}</span>`).join('')
+  const legend=S.map(x=>`<span><i style="background:${x[1]}"></i>${x[0]}</span>`).join('')
+    + '<span><i style="background:var(--aw-track)"></i>其他用途</span>'
+  return `<div class="aw-tl">${bars}</div><div class="aw-tl-axis">${axis}</div><div class="aw-tl-legend">${legend}</div>`
+}
+
+function purposeRows(j){
+  const p=(j.purpose&&j.purpose.purposes)||[]
+  const wow=(j.purpose&&j.purpose.wow)||[]
+  const wm={}; wow.forEach(w=>{wm[w.purpose]=w})
+  const max=Math.max(1,...p.map(x=>x.minutes||0))
+  const GOOD={'学习':1,'办公':1}
+  return p.map((it,i)=>{
+    const w=wm[it.purpose]||{}
+    const d=w.deltaPerDay
+    let cls='aw-delta aw-flat', arrow=''
+    if(typeof d==='number'&&Math.abs(d)>=0.5){
+      arrow=(d>0?'↑':'↓')+Math.abs(d).toFixed(1)
+      cls='aw-delta '+(((d>0)===!!GOOD[it.purpose])?'aw-down':'aw-up')
+    }
+    return `<div class="aw-dp">
+      <span class="n">${it.purpose}</span>
+      <span class="t"><span class="f" style="width:${Math.max(2,Math.round(it.minutes/max*100))}%;background:${SERIES[i%SERIES.length]}"></span></span>
+      <span class="v">${fmtDur(it.minutes)}<span class="${cls}" title="本周 ${w.thisWeek} → 上周 ${w.lastWeek} 分/天">${arrow}</span></span>
+    </div>`
+  }).join('')
+}
+function cats(cats){
+  const max=Math.max(1,...cats.map(c=>c.minutes||0))
+  return cats.slice(0,7).map((c,i)=>`
+    <div class="aw-cat">
+      <div class="aw-cat-head">
+        <span class="aw-cat-name">${c.name}</span>
+        <span class="aw-cat-val">${fmtDur(c.minutes)}${c.share!=null?' · '+c.share+'%':''}</span>
+      </div>
+      <div class="aw-cat-track">
+        <div class="aw-cat-fill" style="width:${Math.max(2,Math.round((c.minutes/max)*100))}%;background:${SERIES[i%SERIES.length]}"></div>
+      </div>
+    </div>`).join('')
+}
+function apps(apps){
+  const max=Math.max(1,...apps.map(a=>a.minutes||0))
+  return apps.slice(0,8).map((a,i)=>`
+    <div class="aw-app">
+      <span class="aw-app-i">${String(i+1).padStart(2,'0')}</span>
+      <div class="aw-app-wrap">
+        <div class="aw-app-n">
+          <b title="${a.app}">${a.app}</b>
+          ${a.device==='phone'?'<span class="aw-tag">手机</span>':''}
+        </div>
+        <div class="aw-app-t"><div class="aw-app-f" style="width:${Math.max(2,Math.round((a.minutes/max)*100))}%"></div></div>
+      </div>
+      <span class="aw-app-v">${fmtDur(a.minutes)}</span>
+    </div>`).join('')
+}
+function trend(byDay){
+  if(!byDay||byDay.length<2) return {svg:'',ticks:''}
+  const W=1000,H=124,pad=8
+  const max=Math.max(1,...byDay.map(d=>d.activeMinutes||0))
+  const step=(W-pad*2)/(byDay.length-1)
+  const pts=byDay.map((d,i)=>[pad+i*step,H-pad-((d.activeMinutes||0)/max)*(H-pad*2-14)])
+  const line=pts.map(p=>p[0].toFixed(1)+','+p[1].toFixed(1)).join(' ')
+  const area=`${pad},${H-pad} `+line+` ${(pad+step*(byDay.length-1)).toFixed(1)},${H-pad}`
+  const grid=[0.33,0.66].map(t=>`<line class="grid" x1="${pad}" x2="${W-pad}" y1="${(pad+(H-pad*2-14)*t).toFixed(1)}" y2="${(pad+(H-pad*2-14)*t).toFixed(1)}"/>`).join('')
+  const dots=pts.map(p=>`<circle class="dot" cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="2.4"/>`).join('')
+  // 峰值标注
+  const peakIdx=byDay.reduce((best,d,i)=>((d.activeMinutes||0)>((byDay[best].activeMinutes)||0)?i:best),0)
+  const peak=pts[peakIdx]
+  const peakLabel=`<text class="grid-label" x="${Math.min(peak[0],W-34).toFixed(1)}" y="${Math.max(11,peak[1]-7).toFixed(1)}">${Math.round(byDay[peakIdx].activeMinutes)}′</text>`
+  // 横轴：取 5 个等距日期
+  const tickIdx=[0,Math.round((byDay.length-1)/4),Math.round((byDay.length-1)/2),Math.round((byDay.length-1)*3/4),byDay.length-1]
+  const ticks=[...new Set(tickIdx)].map(i=>`<span>${byDay[i].date.slice(5)}</span>`).join('')
+  return {
+    svg:`<svg class="aw-chart" viewBox="0 0 ${W} ${H}" preserveAspectRatio="none">
+      ${grid}<polygon class="area" points="${area}"/><polyline class="line" points="${line}"/>${dots}${peakLabel}
+    </svg>`,
+    ticks
+  }
+}
+
+function render(j){
+  // 预览页是独立渲染实现，不走组件里的 detectDark()，这里显式按 ?scheme= 加类
+  const darkCls = (new URLSearchParams(location.search).get('scheme') === 'dark') ? ' aw-dark' : ''
+  const t=j.totals||{}, f=j.focus||{}, c=j.completeness||{}
+  const pcPct=t.pcShare||0, phPct=100-pcPct
+  const days=j.byDay||[]
+  const chart=trend(days)
+
+  document.getElementById('root').innerHTML=`
+  <div class="aw-page${darkCls}"><div class="aw-inner">
+    <header class="aw-top">
+      <div>
+        <h1>使用习惯</h1>
+        <p class="aw-lede">本机 ActivityWatch · 最近 ${j.range.days} 天 · 电脑与手机合并</p>
+      </div>
+      <div class="aw-tools">
+        <div class="aw-seg">
+          <button>今日</button><button aria-pressed="true">7 天</button><button>30 天</button>
+        </div>
+        <button class="aw-btn">刷新</button>
+      </div>
+    </header>
+
+    <section class="aw-hero">
+      <div>
+        <span class="aw-kicker">活跃时长</span>
+        <div class="aw-total aw-num">${fmtNum(t.activeMinutes)}<span class="aw-total-unit">${unitOf(t.activeMinutes)}</span></div>
+        <p class="aw-total-note">
+          单段中位 <b>${f.medianSegmentSec} 秒</b>，每小时切换 <b>${f.switchesPerHour} 次</b><br>
+          最长专注块 <b>${fmtDur(f.longestBlockMin)}</b>，≥25 分钟共 <b>${f.deepBlocks}</b> 个
+        </p>
+      </div>
+      <figure class="aw-heat">
+        <figcaption>一周的时间形状 · 行为星期，列为小时，越亮用得越多</figcaption>
+        <div class="aw-heat-grid">${heatGrid(j.heatmap)}</div>
+        <div class="aw-heat-axis">${heatAxis()}</div>
+      </figure>
+    </section>
+
+    <section class="aw-kpis">
+      <div class="aw-kpi a"><div class="aw-kpi-k">电脑</div><div class="aw-kpi-v aw-num">${fmtDur(t.pcMinutes)}</div><div class="aw-kpi-s">占 ${pcPct}%</div></div>
+      <div class="aw-kpi b"><div class="aw-kpi-k">手机</div><div class="aw-kpi-v aw-num">${fmtDur(t.phoneMinutes)}</div><div class="aw-kpi-s">占 ${phPct}%</div></div>
+      <div class="aw-kpi c"><div class="aw-kpi-k">碎片化</div><div class="aw-kpi-v aw-num">${f.fragmentation}<small>%</small></div><div class="aw-kpi-s">短于 30 秒的片段</div></div>
+      <div class="aw-kpi d"><div class="aw-kpi-k">手机解锁</div><div class="aw-kpi-v aw-num">${t.unlocks||0}<small>次</small></div><div class="aw-kpi-s">区间内累计</div></div>
+    </section>
+
+    <div class="aw-cols">
+      <section>
+        <div class="aw-h"><h2>时间花在哪</h2><span>按用途 · 高置信 ${(j.purpose&&j.purpose.confidence?j.purpose.confidence.high.share:0)}%</span></div>
+        ${purposeRows(j)}
+        <div class="aw-note">用途是推断值：界面类名 &gt; 包名 &gt; 应用名 &gt; 窗口标题 依次判定；右侧箭头是最近 7 天 vs 前 7 天的日均变化。</div>
+      </section>
+      <section>
+        <div class="aw-h"><h2>具体在哪个应用</h2><span>Top ${Math.min(8,(j.apps||[]).length)}</span></div>
+        ${apps(j.apps||[])}
+      </section>
+    </div>
+
+    <div class="aw-cols">
+      <section>
+        <div class="aw-h"><h2>微信内部在干什么</h2><span>日均 ${(j.detail&&j.detail.wechat?j.detail.wechat.perDay:0)} 分钟，按界面拆</span></div>
+        ${(j.detail&&j.detail.wechat?j.detail.wechat.items:[]).map((it,i)=>`
+          <div class="aw-cat">
+            <div class="aw-cat-head">
+              <span class="aw-cat-name">${it.name}</span>
+              <span class="aw-cat-val">${fmtDur(it.minutes)} · ${it.share}%</span>
+            </div>
+            <div class="aw-cat-track">
+              <div class="aw-cat-fill" style="width:${Math.max(2,Math.round((it.minutes/(j.detail.wechat.totalMinutes||1))*100))}%;background:${SERIES[i%SERIES.length]}"></div>
+            </div>
+          </div>`).join('')}
+        <div class="aw-note">「微信」是个容器，不是一种行为：视频号、小程序、公众号都在里面，真正聊天只占 2%。</div>
+      </section>
+      <section>
+        <div class="aw-h"><h2>死区</h2><span>亮屏但没有实际用途</span></div>
+        <div class="aw-kpis" style="grid-template-columns:1fr 1fr;margin-top:0">
+          <div class="aw-kpi c">
+            <div class="aw-kpi-k">桌面空转</div>
+            <div class="aw-kpi-v aw-num">${(j.detail&&j.detail.deadzone?j.detail.deadzone.perDay:0)}<small>分/天</small></div>
+            <div class="aw-kpi-s">占全部活跃 ${(j.detail&&j.detail.deadzone?j.detail.deadzone.share:0)}%</div>
+          </div>
+          <div class="aw-kpi d">
+            <div class="aw-kpi-k">微信内空转</div>
+            <div class="aw-kpi-v aw-num">${(function(){const it=(j.detail&&j.detail.wechat?j.detail.wechat.items:[]).find(x=>x.name==='微信主界面');return it?it.perDay:0})()}<small>分/天</small></div>
+            <div class="aw-kpi-s">停在会话列表没点进聊天</div>
+          </div>
+        </div>
+        <div class="aw-note">死区 = 手机亮着、时间在走，但没有任何目的性产出。它发生在你还没决定要干什么的那几秒。</div>
+      </section>
+    </div>
+
+    <section class="aw-trend">
+      <div class="aw-h"><h2>一天的用途分布</h2><span>24 小时堆叠 · 娱乐/学习/办公</span></div>
+      ${hourTimeline(j)}
+    </section>
+
+    <section class="aw-trend">
+      <div class="aw-h"><h2>每日活跃趋势</h2><span>峰值 ${Math.max(...days.map(d=>d.activeMinutes||0)).toFixed(0)} 分钟/天</span></div>
+      ${chart.svg}
+      <div class="aw-axis-x">${chart.ticks}</div>
+    </section>
+
+    <footer class="aw-foot">
+      <span class="aw-split">
+        <span class="aw-split-bar"><i class="pc" style="width:${pcPct}%"></i><i class="ph" style="width:${phPct}%"></i></span>
+        <span class="aw-legend">
+          <span><em></em>电脑</span><span><em class="ph"></em>手机</span>
+        </span>
+      </span>
+      ${c.offlineBlocks?`<span>电脑关机 ${c.offlineBlocks} 段 · ${fmtDur(c.offlineMinutes)}（已显式标记，不是「没活动」）</span>`:'<span>本次区间内无关机空档</span>'}
+      <span>活跃时长 = 窗口事件 ∩ 非 AFK 区间；手机为 App 级、按事件时长直计</span>
+    </footer>
+  </div></div>`
+}
+
+// 默认读内置样本（lib/sample-summary.js：虚构演示数据，不是任何人的真实记录）。
+// 加 ?live=1 才向本机插件路由拉实时数据（地址见上面的 API 推导）。
+function paint(data) {
+  if (!data || !data.ok) return false
+  render(data)
+  // ?scroll=bottom 用于验证滚动容器真的生效：滚到底还能看到页脚就说明没被裁死
+  if (QS.get('scroll') === 'bottom') {
+    requestAnimationFrame(() => {
+      const el = document.querySelector('.aw-page')
+      if (el) el.scrollTop = el.scrollHeight
+    })
+  }
+  return true
+}
+
+function fail(msg) {
+  document.getElementById('root').innerHTML = '<div class="aw-page"><div class="aw-state">' + msg + '</div></div>'
+}
+
+if (LIVE && API) {
+  fetch(API)
+    .then((r) => r.json())
+    .then((d) => { if (!paint(d)) fail('插件返回了空数据：' + API) })
+    .catch((e) => fail('拉取失败：' + API + '（' + e.message + '）。去掉 ?live=1 可看内置演示数据。'))
+} else if (!paint(window.__AW_SAMPLE__)) {
+  fail('缺少样本数据：先运行 node tools/export-sample.mjs 生成 lib/sample-summary.js。')
+}
+</script>
+</body>
+</html>

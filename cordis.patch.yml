@@ -1,0 +1,7 @@
+- insert:
+    - id: dsh-aw-viz
+      name: 'dsh-aw-viz'
+      config:
+        activityWatchBase: 'http://127.0.0.1:5600'
+        basePath: '/dsh-aw-viz'
+        defaultRangeDays: 7

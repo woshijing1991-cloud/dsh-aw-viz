@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Syntax check
+        run: |
+          node --check index.js
+          node --check lib/client.js
+          node --check lib/client.template.js
+          node --check lib/stats.js
+          node --check lib/purpose.js
+      - name: Build drift check (page.css -> client.js)
+        run: node tools/build-client.mjs --check
+      - name: Smoke test
+        run: node tools/smoke.mjs
+      - name: package.json sanity
+        run: node -e "const p=require('./package.json'); if(p.private) throw new Error('private:true must not be published'); if(p.license!=='MIT') throw new Error('license must be MIT'); if(!p.repository) throw new Error('missing repository'); console.log(p.name, p.version)"

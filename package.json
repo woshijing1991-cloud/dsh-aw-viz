@@ -1,0 +1,69 @@
+{
+  "name": "dsh-aw-viz",
+  "version": "0.1.0",
+  "description": "Turns your own ActivityWatch records into metrics an AI can read (time allocation, fragmentation, focus blocks, hourly rhythm) so the assistant can suggest concrete changes to how you use your screens. Read-only, local, no cloud.",
+  "type": "module",
+  "main": "index.js",
+  "exports": {
+    ".": "./index.js",
+    "./client": "./lib/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "index.js",
+    "lib",
+    "tools",
+    "cordis.patch.yml",
+    "preview.html",
+    "README.md",
+    "LICENSE"
+  ],
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true
+    }
+  },
+  "keywords": [
+    "dsh",
+    "dsh-plugin",
+    "deepseek-harness",
+    "activitywatch",
+    "screen-time",
+    "habits",
+    "dashboard",
+    "quantified-self",
+    "focus",
+    "visualization"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "author": "CCC (woshijing1991-cloud)",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/woshijing1991-cloud/dsh-aw-viz.git"
+  },
+  "homepage": "https://github.com/woshijing1991-cloud/dsh-aw-viz#readme",
+  "bugs": {
+    "url": "https://github.com/woshijing1991-cloud/dsh-aw-viz/issues"
+  },
+  "scripts": {
+    "build": "node tools/build-client.mjs",
+    "check": "node tools/build-client.mjs --check",
+    "test": "node tools/smoke.mjs"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/dsh": ">=0.2.0"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh": {
+      "optional": true
+    }
+  }
+}
